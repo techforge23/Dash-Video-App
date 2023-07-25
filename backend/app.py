@@ -6,9 +6,8 @@ import boto3
 from botocore.exceptions import NoCredentialsError, ClientError
 from sib_api_v3_sdk.rest import ApiException
 from email_service import send_email
-from dotenv import load_dotenv
+from io import BytesIO
 
-load_dotenv()
 
 mysql_password = os.getenv('MYSQL_PASSWORD')
 access_key = os.getenv('ACCESS_KEY')
@@ -22,7 +21,6 @@ app.config['MYSQL_HOST'] = 'us-cdbr-east-06.cleardb.net'
 app.config['MYSQL_USER'] = 'b1a9c61d9610ec'
 app.config['MYSQL_PASSWORD'] = mysql_password
 app.config['MYSQL_DB'] = 'heroku_a2ad6038d6e7198'
-app.config['UPLOAD_FOLDER'] = '/tmp'
 app.config['BUCKET_NAME'] = 'dashvideobucket'
 
 
@@ -95,23 +93,18 @@ def upload():
         if count > 0:
             return jsonify({'error': 'This video already exists.'}), 400
 
-        # Save the uploaded file to the designated folder
-        filename = video.filename
-        filepath = os.path.join(app.config['UPLOAD_FOLDER'], filename)
-        video.save(filepath)
-
         # Handle category
         cursor.execute("INSERT IGNORE INTO categories (name) VALUES (%s)", (category,))
         cursor.execute("SELECT id FROM categories WHERE name = %s", (category,))
         category_id = cursor.fetchone()[0]
 
         # Save relevant information to the MySQL database
-        cursor.execute("INSERT INTO videos (filename, filepath, category_id) VALUES (%s, %s, %s)",
-                       (filename, filepath, category_id))
+        cursor.execute("INSERT INTO videos (filename, category_id) VALUES (%s, %s)",
+                       (video.filename, category_id))
         conn.commit()
 
         # Return a response or perform additional actions
-        return jsonify({'message': 'Video uploaded successfully', 'filename': filename})
+        return jsonify({'message': 'Video uploaded successfully', 'filename': video.filename})
 
     except Exception as e:
         print(e)
@@ -214,9 +207,13 @@ def delete_video(video_filename):
         cursor.execute("DELETE FROM videos WHERE filename = %s", (video_filename,))
         conn.commit()
 
-        # Optionally, remove the file from the server
-        filepath = os.path.join(app.config['UPLOAD_FOLDER'], video_filename)
-        os.remove(filepath)
+        # Remove the file from S3
+        try:
+            s3.delete_object(Bucket=app.config['BUCKET_NAME'], Key=video_filename)
+            print("Deletion from S3 Successful")
+        except Exception as e:
+            print("Error deleting from S3: ", e)
+            return jsonify({'error': 'Error deleting from S3'}), 500
 
     except Exception as e:
         print(e)
@@ -231,30 +228,29 @@ def delete_video(video_filename):
 
 @app.route('/sendEmail', methods=['POST'])
 def sendEmail():
-    data = request.get_json()
-    if not data:
-        return jsonify({'error': 'No data received'}), 400
-
-    email = data.get('recipient')  # change from 'email' to 'recipient'
-    videos = data.get('videos')
-    body = data.get('body')  # fetch the body from the request
-
-    if not email or not videos:
+    if 'recipient' not in request.form or 'body' not in request.form or 'videos' not in request.files:
         return jsonify({'error': 'Missing required information'}), 400
 
-    # Upload videos to S3 and prepare URLs for the email.
+    recipient = request.form.get('recipient')
+    body = request.form.get('body')
+    videos = request.files.getlist('videos')
+
     video_urls = []
     for video in videos:
-        local_file_path = os.path.join(app.config['UPLOAD_FOLDER'], video)
-        if upload_to_aws(local_file_path, video):
-            url = create_presigned_url(video)
+        try:
+            # Upload the video file to S3
+            s3.upload_fileobj(BytesIO(video.read()), app.config['BUCKET_NAME'], video.filename)
+            url = create_presigned_url(video.filename)
             if url is not None:
                 # Format each URL as a clickable hyperlink in HTML
                 url = "<a href='{}'>{}</a>".format(url, url)
                 video_urls.append(url)
+        except Exception as e:
+            print("Error uploading to S3: ", e)
+            return jsonify({'error': 'Error uploading to S3'}), 500
 
     # Prepare the email subject and content. Adjust these as needed.
-    subject = "Your Videos"
+    subject = "Your Dash Videos"
     content = body + "<br><br>Here are your selected videos:<br>" + '<br><br>'.join(video_urls)  # include the body in the email content
 
     # Prepare the sender. This could also be adjusted as needed.
@@ -262,7 +258,7 @@ def sendEmail():
 
     try:
         # Attempt to send the email.
-        send_email(sender, email, subject, content)
+        send_email(sender, recipient, subject, content)
     except ApiException as e:
         return jsonify({'error': 'Failed to send email'}), 500
 
