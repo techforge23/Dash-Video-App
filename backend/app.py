@@ -22,7 +22,7 @@ app.config['MYSQL_HOST'] = 'us-cdbr-east-06.cleardb.net'
 app.config['MYSQL_USER'] = 'b1a9c61d9610ec'
 app.config['MYSQL_PASSWORD'] = mysql_password
 app.config['MYSQL_DB'] = 'heroku_a2ad6038d6e7198'
-app.config['UPLOAD_FOLDER'] = 'C:/Users/vraze/OneDrive/Documents/Dash_Videos'
+app.config['UPLOAD_FOLDER'] = '/tmp'
 app.config['BUCKET_NAME'] = 'dashvideobucket'
 
 
