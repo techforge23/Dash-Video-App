@@ -247,8 +247,9 @@ def delete_video(video_filename):
 
 @app.route('/sendEmail', methods=['POST'])
 def sendEmail():
-    if 'recipient' not in request.form or 'body' not in request.form or 'videos' not in request.files:
-        return jsonify({'error': 'Missing required information'}), 400
+    missing_fields = [field for field in ['recipient', 'body', 'videos'] if field not in request.form and field not in request.files]
+    if missing_fields:
+        return jsonify({'error': f"Missing required information: {', '.join(missing_fields)}"}), 400
 
     recipient = request.form.get('recipient')
     body = request.form.get('body')
