@@ -248,38 +248,34 @@ def delete_video(video_filename):
 
 @app.route('/sendEmail', methods=['POST'])
 def sendEmail():
-    missing_fields = [field for field in ['recipient', 'body', 'videos'] if field not in request.form]
-    if missing_fields:
-        return jsonify({'error': f"Missing required information: {', '.join(missing_fields)}"}), 400
+    if not request.is_json:
+        return jsonify({'error': 'Missing JSON in request'}), 400
 
-    recipient = request.form.get('recipient')
-    body = request.form.get('body')
-    videos = request.form.get('videos').split(',')  # Splitting filenames by comma
+    data = request.get_json()
+    missing_fields = [field for field in ['recipient', 'subject', 'body', 'videos'] if field not in data]
+    if missing_fields:
+        return jsonify({'error': f"Missing required fields: {', '.join(missing_fields)}"}), 400
+
+    recipient = data['recipient']
+    subject = data['subject']
+    body = data['body']
+    videos = data['videos']  # videos are a list of filenames
 
     video_urls = []
-    for video_filename in videos:  # Loop over filenames, not file objects
-        try:
-            url = create_presigned_url(video_filename.strip())  # Remove leading/trailing spaces
-            if url is not None:
-                # Format each URL as a clickable hyperlink in HTML
-                url = "<a href='{}'>{}</a>".format(url, url)
-                video_urls.append(url)
-        except Exception as e:
-            print("Error generating presigned URL: ", e)
-            return jsonify({'error': 'Error generating presigned URL'}), 500
+    for video_filename in videos:
+        presigned_url = create_presigned_url(video_filename)
+        if presigned_url:
+            video_urls.append(presigned_url)
+        else:
+            return jsonify({'error': f"Failed to create presigned url for video {video_filename}"}), 500
 
-    # Prepare the email subject and content. Adjust these as needed.
-    subject = "Your Dash Videos"
-    content = body + "<br><br>Here are your selected videos:<br>" + '<br><br>'.join(video_urls)  # include the body in the email content
+    # Format the video URLs to be clickable in the email
+    clickable_links = "\n".join([f'<a href="{url}">{url}</a>' for url in video_urls])
 
-    # Prepare the sender. This could also be adjusted as needed.
-    sender = {"email": "techforgeconsulting@gmail.com"}
+    # Append clickable video URLs to the email body
+    body += f"\n\nVideos:\n{clickable_links}"
 
-    try:
-        # Attempt to send the email.
-        send_email(sender, recipient, subject, content)
-    except ApiException as e:
-        return jsonify({'error': 'Failed to send email'}), 500
+    send_email({"email": "contact@dash.com", "name": "Dash"}, recipient, subject, body)
 
     return jsonify({'message': 'Email sent successfully'}), 200
 
