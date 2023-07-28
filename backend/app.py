@@ -269,10 +269,10 @@ def sendEmail():
         else:
             return jsonify({'error': f"Failed to create presigned url for video {video_filename}"}), 500
 
-    # Append video URLs to the email body
-    body += "\n\n" + "\n".join(video_urls)
+    # Format the email body
+    formatted_body = "<h2>Here are your specialized Dash Videos<h2>\n\n" + '\n'.join([f'<a href="{url}">{url}</a>' for url in video_urls]) + "\n\n" + body + "\n\nThank you,\nDash"
 
-    send_email({"email": "contact@dash.com", "name": "Dash"}, recipient, subject, body)
+    send_email({"email": "contact@dash.com", "name": "Dash"}, recipient, subject, formatted_body)
 
     return jsonify({'message': 'Email sent successfully'}), 200
 
