@@ -248,27 +248,25 @@ def delete_video(video_filename):
 
 @app.route('/sendEmail', methods=['POST'])
 def sendEmail():
-    missing_fields = [field for field in ['recipient', 'body', 'videos'] if field not in request.form and field not in request.files]
+    missing_fields = [field for field in ['recipient', 'body', 'videos'] if field not in request.form]
     if missing_fields:
         return jsonify({'error': f"Missing required information: {', '.join(missing_fields)}"}), 400
 
     recipient = request.form.get('recipient')
     body = request.form.get('body')
-    videos = request.files.getlist('videos')
+    videos = request.form.get('videos').split(',')  # Splitting filenames by comma
 
     video_urls = []
-    for video in videos:
+    for video_filename in videos:  # Loop over filenames, not file objects
         try:
-            # Upload the video file to S3
-            s3.upload_fileobj(BytesIO(video.read()), app.config['BUCKET_NAME'], video.filename)
-            url = create_presigned_url(video.filename)
+            url = create_presigned_url(video_filename.strip())  # Remove leading/trailing spaces
             if url is not None:
                 # Format each URL as a clickable hyperlink in HTML
                 url = "<a href='{}'>{}</a>".format(url, url)
                 video_urls.append(url)
         except Exception as e:
-            print("Error uploading to S3: ", e)
-            return jsonify({'error': 'Error uploading to S3'}), 500
+            print("Error generating presigned URL: ", e)
+            return jsonify({'error': 'Error generating presigned URL'}), 500
 
     # Prepare the email subject and content. Adjust these as needed.
     subject = "Your Dash Videos"
