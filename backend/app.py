@@ -37,14 +37,11 @@ def get_db_connection():
         return None
 
 
-def upload_to_aws(local_file, s3_file):
+def upload_to_aws(file_obj, s3_file):
     try:
-        s3.upload_file(local_file, app.config['BUCKET_NAME'], s3_file)
+        s3.upload_fileobj(file_obj, app.config['BUCKET_NAME'], s3_file)
         print("Upload Successful")
         return True
-    except FileNotFoundError:
-        print("The file was not found")
-        return False
     except NoCredentialsError:
         print("Credentials not available")
         return False
@@ -111,6 +108,10 @@ def upload():
 
         if count > 0:
             return jsonify({'error': 'This video already exists.'}), 400
+
+        # Upload the video file to S3
+        video_file = BytesIO(video.read())
+        upload_to_aws(video_file, video.filename)
 
         # Handle category
         cursor.execute("INSERT IGNORE INTO categories (name) VALUES (%s)", (category,))
