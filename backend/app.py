@@ -269,11 +269,8 @@ def sendEmail():
         else:
             return jsonify({'error': f"Failed to create presigned url for video {video_filename}"}), 500
 
-    # Format the video URLs to be clickable in the email
-    clickable_links = "\n".join([f'<a href="{url}">{url}</a>' for url in video_urls])
-
-    # Append clickable video URLs to the email body
-    body += f"\n\nVideos:\n{clickable_links}"
+    # Append video URLs to the email body
+    body += "\n\n" + "\n".join(video_urls)
 
     send_email({"email": "contact@dash.com", "name": "Dash"}, recipient, subject, body)
 
